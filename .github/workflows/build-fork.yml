@@ -42,7 +42,21 @@ jobs:
             -DCMAKE_CUDA_ARCHITECTURES=61 ^
             -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler ^
             -DGGML_CUDA_CUB_3DOT2=ON
-          cmake --build build --config Release --target llama-server llama-bench
+          if errorlevel 1 exit /b 1
+          cmake --build build --config Release --target llama-server llama-bench -- -k 0 > build.log 2>&1
+          echo %ERRORLEVEL% > build.status
+          exit /b 0
+      - name: ALL ERRORS (copy this part if the build failed)
+        if: always()
+        shell: pwsh
+        working-directory: fork
+        run: |
+          if (Test-Path build.log) { Select-String -Path build.log -Pattern 'error C|error:|fatal error|LNK[0-9]+|CMake Error|FAILED' | Select-Object -First 80 | ForEach-Object { $_.Line } }
+          if (Test-Path build.status) { "exit code: " + (Get-Content build.status) }
+      - name: Stop here if the build failed
+        shell: pwsh
+        working-directory: fork
+        run: if ((Get-Content build.status).Trim() -ne '0') { exit 1 }
       - name: Collect files
         shell: pwsh
         run: |
