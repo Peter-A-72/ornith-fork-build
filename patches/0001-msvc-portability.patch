@@ -1,1 +1,50 @@
 
+diff --git a/ggml/src/ggml-moe-diag.h b/ggml/src/ggml-moe-diag.h
+index b2a7f6d..242ede4 100644
+--- a/ggml/src/ggml-moe-diag.h
++++ b/ggml/src/ggml-moe-diag.h
+@@ -70,11 +70,28 @@ static inline uint64_t ggml_moe_diag_sched_report_every(void) {
+     return cached;
+ }
+ 
++#if defined(_WIN32)
++#ifndef WIN32_LEAN_AND_MEAN
++#define WIN32_LEAN_AND_MEAN
++#endif
++#ifndef NOMINMAX
++#define NOMINMAX
++#endif
++#include <windows.h>
++static inline uint64_t ggml_moe_diag_now_ns(void) {
++    static LARGE_INTEGER freq = { 0 };
++    LARGE_INTEGER c;
++    if (freq.QuadPart == 0) { QueryPerformanceFrequency(&freq); }
++    QueryPerformanceCounter(&c);
++    return (uint64_t)(c.QuadPart / freq.QuadPart) * 1000000000ULL + (uint64_t)(c.QuadPart % freq.QuadPart) * 1000000000ULL / (uint64_t)freq.QuadPart;
++}
++#else
+ static inline uint64_t ggml_moe_diag_now_ns(void) {
+     struct timespec ts;
+     clock_gettime(CLOCK_MONOTONIC, &ts);
+     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+ }
++#endif
+ 
+ struct ggml_moe_diag_stat {
+     const char * name;
+diff --git a/src/llama-moe-fused-cold.cpp b/src/llama-moe-fused-cold.cpp
+index a118471..1672907 100644
+--- a/src/llama-moe-fused-cold.cpp
++++ b/src/llama-moe-fused-cold.cpp
+@@ -11,6 +11,11 @@
+ #include <algorithm>
+ #include <omp.h>
+ 
++#if defined(_MSC_VER) && !defined(__clang__)
++#include <xmmintrin.h>
++#define __builtin_prefetch(addr, rw, loc) _mm_prefetch((const char *)(addr), _MM_HINT_T1)
++#endif
++
+ static inline float silu_f32(float x) {
+     return x / (1.0f + expf(-x));
+ }
